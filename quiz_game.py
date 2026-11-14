@@ -19,6 +19,7 @@ import json
 import os
 import sys
 from typing import List, Optional
+import random
 
 class UserExit(Exception):
     """
@@ -394,7 +395,7 @@ class QuizGame:
         _, value = self._read_int(prompt, min_val, max_val)
         return value
 
-    def get_answer_input(self, prompt: str) -> tuple[InputResult, Optional[int]]:
+    def _get_answer_input(self, prompt: str) -> tuple[InputResult, Optional[int]]:
         """
         정답 입력 받기
         """
@@ -413,6 +414,244 @@ class QuizGame:
         print(f" exit: 종료")
         print("=" * 40)
 
+    def play_quiz(self) -> None:
+        """
+        등록된 퀴즈를 섞어서 한 판 퀴즈를 진행하고, 결과 출력
+        """
+        if not self.quizzes:
+            print("\n 등록된 퀴즈가 없습니다. 먼저 퀴즈를 추가해주세요.")
+            return
+
+        try:
+            # (선택 과제) 문제 수 선택
+            if self.config.qcount:
+                selected_quizzes = self._select_quizzes()
+            # (선택 과제) 랜덤 출제
+            elif self.config.shuffle:
+                selected_quizzes = self._shuffle_quizzes()
+            else:
+                selected_quizzes = self.quizzes.copy()
+
+            # 문제 총 개수
+            total = len(selected_quizzes)
+            # 퀴즈 실행
+            correct, hint_used = self._run_quiz(selected_quizzes)
+            # 점수 계산
+            final_score, percentage = self._calculate_score(total, correct, hint_used)
+            # 최고 점수 갱신 여부 확인
+            is_new_best = self._update_best_score(final_score, total)
+            # 히스토리 저장
+            # self._save_history(final_score, total, hint_used)
+            # 결과 출력
+            self._print_result(total, correct, hint_used, percentage, is_new_best)
+
+        except UserExit as e:
+            if not e.is_run_quiz:
+                print("\n퀴즈를 수행하지 않아 그대로 메뉴로 돌아갑니다.")
+                return
+
+            # # 중간 이력 저장 
+            # save_history = self._get_bool_input(f"{e.curr_idx -1 }번째 문제까지 퀴즈를 풀었습니다. 퀴즈 결과를 히스토리에 저장하시겠습니까? (y/n): ")
+            # if save_history:
+            #     print(" ㄴ 중간 퀴즈 결과를 저장합니다...\n")
+            #     final_score, _ = self._calculate_score(e.curr_idx -1, e.correct, e.hint_used)
+            #     self._save_history(final_score, e.curr_idx -1, e.hint_used)
+            # else:
+            #     print(" ㄴ 퀴즈를 중단하고 메뉴로 돌아갑니다.")
+
+
+    def _select_quizzes(self) -> list[Quiz]:
+        """
+        문제 수 선택 후, 문제 랜덤 선택
+        """
+        # 문제 수 선택
+        total = len(self.quizzes)
+        try: 
+            # 문제 수 입력 받기
+            count = self._get_int_input(f"풀고 싶은 문제 수를 입력하세요 (1~{total}개): ", 1, total)
+        except ValueError:
+            # 숫자 변환 실패 시 모든 문제 풀기
+            count = total
+
+        # 문제 랜덤 선택
+        # random.sample(population, k): population에서 k개의 요소를 랜덤하게 선택하여 리스트로 반환
+        return random.sample(self.quizzes, k=count) # noqa: S2245
+
+
+    def _shuffle_quizzes(self) -> list[Quiz]:
+        """
+        문제 랜덤 선택
+        """
+        # shuffle: 리스트를 섞는 함수, 리스트를 변경하고 반환값은 None
+        # noqa (No Quality Assurance): 품질 검사 예외 처리, 보안 경고를 무시하고 코드를 실행
+        # S2245: SonarQube 규칙 번호, random 모듈은 예측 가능한 기본 난수 생성기를 써서 보안 경고가 납니다.
+        # 비밀번호, 토큰, 세션 키같은 보안이 중요한 용도에는 SystemRandom을 사용해야 하며, (예: secrets.SystemRandom().shuffle(리스트))
+        # 퀴즈 게임에는 예측 가능한 기본 난수 생성기를 사용해도 문제 없으므로 noqa 처리합니다.
+        quizzes_to_play = self.quizzes.copy()
+        random.shuffle(quizzes_to_play) # noqa: S2245
+        return quizzes_to_play
+
+    def _run_quiz(self, quizzes: list[Quiz]) -> tuple[int, int]:
+        """
+        퀴즈를 실행합니다.
+
+        args:
+            quizzes: 퀴즈 리스트
+
+        returns:
+            correct: 정답 개수
+            hint_used: 힌트 사용 횟수
+        """
+        total = len(quizzes)
+        print(f"\n 퀴즈를 시작합니다! (총 {total}문제)")
+
+        # 정답 개수 초기화
+        correct = 0
+
+        # 힌트 사용 여부 초기화
+        hint_used = 0
+        # enumerate(iterable, start=0): 순서가 있는 자료형(리스트, 튜플, 문자열)을 인덱스와 함께 반복
+        #   iterable: 순서가 있는 자료형(리스트, 튜플, 문자열)
+        #   start: 인덱스의 시작값
+
+        try:
+
+            # 문제 번호를 1부터 시작하기 위해 enumerate의 시작값을 1로 준다.
+            for i, quiz in enumerate(quizzes, 1):
+                # 문제를 표시하는 메서드 호출
+                quiz.display(index=i)
+                # 답변 입력 받기 (힌트 사용 입력 포함)
+                answer, used_hint = self._ask_answer(quiz)
+
+                # 힌트 사용 시
+                if used_hint:
+                    # 힌트 사용 횟수 증가
+                    hint_used += 1
+
+                # 정답 확인
+                if answer is not None and quiz.check_answer(answer):
+                    print(" 정답입니다!")
+                    # 정답 개수 증가
+                    correct += 1
+                else:
+                    # 오답 시 정답 번호 표시
+                    print(f" 오답입니다. 정답은 {quiz.answer}번입니다.")
+            return correct, hint_used
+
+        except UserExit: # 퀴즈 중단 시 정답 개수와 힌트 사용 횟수 반환
+            raise UserExit(total, correct, hint_used, i)
+
+    def _ask_answer(self, quiz: Quiz) -> tuple[InputResult, Optional[int], bool]:
+        """같은 문제에서 정답 번호가 나올 때까지 다시 묻는다.
+
+        힌트를 봐도 다음 문제로 넘기지 않는다.
+        힌트가 없으면 감점하지 않고, 같은 문제에서 여러 번 봐도 감점은 한 번이다.
+        
+        args:
+            quiz: 퀴즈 객체
+
+        returns:
+            answer: 정답 번호
+            used_hint: 힌트 사용 여부
+        """
+        used_hint = False
+        while True:
+            # 정답 입력 받기
+            result, answer = self._get_answer_input(
+                "정답 입력: "
+            )
+            # 힌트보기를 요청하지 않은 경우 정답 번호 반환
+            if result is not InputResult.HINT:
+                return answer, used_hint
+
+            # 힌트보기를 요청했지만 힌트가 없으면 힌트 없다고 알림
+            if not quiz.hint:
+                print("💡 힌트가 없습니다.")
+                continue
+
+            # 힌트를 한 번도 보여주지 않은 경우 힌트를 보여준다.
+            if not used_hint:
+                print(f"💡 힌트: {quiz.hint} ({self.config.hint_penalty}점 감점)")
+                used_hint = True
+            # 힌트를 한 번 이상 보여준 경우, 감점하지 않고 힌트만 보여준다.
+            else:
+                print(f"💡 힌트: {quiz.hint}")
+
+
+    def _calculate_score(self, total: int,correct: int, hint_used: int) -> int:
+        """
+        점수를 계산합니다.
+
+        args:
+            total: 문제 총 개수
+            correct: 정답 개수
+            hint_used: 힌트 사용 횟수
+
+        returns:
+            final_score: 최종 점수
+            percentage: 정답 비율(%)
+        """
+
+        # 문제가 0개면 0으로 나눌 수 없으므로 점수는 0으로 둔다.
+        # 정답 비율(%) 계산, 소수점을 버리고 정수로 표시
+
+        # int(number) -> 99 로 소수점을 버리고 정수로 표시
+        # round(number, ndigits=0) -> 99.99 -> 100 반올림 하고 정수로 표시
+
+        # 힌트 사용 시 패널티 점수 감점, 최종 점수 계산에서 점수 감점,
+        # 0점 이하로 내려가지 않도록 max(0, 점수 - (힌트 사용 횟수 * 힌트 패널티 점수))
+        final_score = max(0.0, correct - (hint_used * self.config.hint_penalty))
+        # 정답 비율(%) 계산, 소수점을 버리고 정수로 표시
+        percentage = round((final_score / total) * 100, 1) if total > 0 else 0.0
+        return final_score, percentage
+
+    def _update_best_score(self, score: float, total: int) -> None:
+        """
+        최고 점수를 갱신합니다.
+
+        args:
+            score: 최종 점수
+            total: 문제 총 개수
+        returns:
+            is_new_best: 최고 점수 갱신 여부
+        """
+        if total ==0:
+            return
+
+        # 현재 정답 비율 계산
+        current_ratio = score / total
+        # 기존 최고 점수 비율 계산
+        best_ratio = (self.best_score / self.best_total) if self.best_total > 0 else 0
+
+        # 현재 점수 비율이 최고 점수를 넘지 못하는 경우 그대로 리턴
+        if current_ratio <= best_ratio:
+            return
+
+        self.best_score = score
+        self.best_total = total
+
+        # 최고 점수, 문제 수 저장
+        self.save_data()
+
+    def _print_result(self, total: int, correct: int, hint_used: int, percentage: int, is_new_best: bool) -> None:
+        """
+        결과를 출력합니다.
+
+        args:
+            total: 출제된 전체 문제 수
+            correct: 맞힌 개수
+            hint_used: 힌트를 사용한 횟수
+            percentage: 최종 점수 (힌트 감점 반영, 퍼센트)
+            is_new_best: 이번 결과가 최고 기록을 갱신했는지
+        """
+        print("\n" + "=" * 40)
+        print(f" 결과: {total}문제 중 {correct}문제 정답, 힌트 {hint_used}회 ({percentage}점)")
+        print("=" * 40)
+
+        # 최고 점수인 경우
+        if is_new_best:
+            print(" 새로운 최고 점수입니다!")
+        print("=" * 40)
 
     def run(self) -> None:
         """
@@ -435,8 +674,7 @@ class QuizGame:
                 self.show_menu()
                 choice = self._get_int_input("선택: ", 1, 8)
                 if choice == 1:
-                    # todo
-                    return
+                    self.play_quiz()
                 elif choice == 2:
                     # todo
                     return
