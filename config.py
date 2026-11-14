@@ -21,7 +21,7 @@ class GameConfig:
         if not self.state_path.endswith(".json"):
             raise ValueError("퀴즈 데이터 파일은 JSON 파일이어야 합니다.")
         if not os.path.exists(self.state_path):
-            print(f"ℹ️ {self.state_file} 파일이 없습니다. 기본 데이터로 시작합니다.")
+            print(f"ℹ️ {self.state_path} 파일이 없습니다. 기본 데이터로 시작합니다.")
 
         # history 검증
         if self.save_history:
