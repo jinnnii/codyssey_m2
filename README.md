@@ -402,6 +402,7 @@ git switch -b feature/play-quiz
 # 커밋 진행 후
 git checkout main
 git merge feature/play-quiz
+git push
 ```
 **로그**
 - 10개 이상의 커밋, 병합 증적
@@ -429,7 +430,8 @@ git merge feature/play-quiz
 ```bash
 git log --oneline --graph --all
 ```
-![alt text](docs/git_logs.png)
+- Git 로그 출력 캡처
+![Git 로그 출력](docs/git_logs.png)
 
 ## 과제 목표
 
@@ -521,7 +523,12 @@ with open("파일명", "r", encoding="utf-8") as f:
 | `pull` | 원격 변경 사항을 가져와서 현재 브랜치에 병합 (fetch + merge) |
 
 - clone, pull, petch 증적
-![alt text](docs/git_clone_fetch_pull.png)
+```bash
+git clone https://github.com/jinnnii/codyssey_m2.git
+git fetch
+git pull
+```
+![clone, pull, petch 증적](docs/git_clone_fetch_pull.png)
 
 **checkout vs switch**
 | 명령어 | 설명 |
@@ -563,3 +570,50 @@ refactor: 입력 처리 메서드 분리
 
 현재 학습용 프로젝트에서는 퀴즈 수가 적으므로,
 메모리에 모두 로드하는 방식으로 충분하다.
+
+## 데이터 백업 및 복구
+### 백업 정책
+- `save_data()` 호출 시 `state.json.bak`으로 이전 파일을 백업한다.
+
+### 복구 절차
+
+**1. 자동 복구**  
+`state.json`이 손상되면 프로그램이 기본 퀴즈로 복구한다.
+
+**2. 수동 복구**  
+백업 파일이 있을 경우:
+
+```bash
+# 최신 백업으로 복구
+cp state.json.bak state.json
+```
+
+**3. 복구 스크립트 예시**
+```python
+import shutil
+import os
+
+def restore_backup():
+    if os.path.exists("state.json.bak"):
+        shutil.copy("state.json.bak", "state.json")
+        print("백업에서 복구했습니다.")
+    else:
+        print("백업 파일이 없습니다.")
+```
+
+## 요구사항 변경 시 수정 위치
+
+| 변경 내용 | 수정할 곳 |
+|-----------|-----------|
+| 점수 계산 방식 변경 | `_calculate_score` 에서 계산식 변경 |
+| 힌트 사용 여부 | `GameConfig.hint` |
+| 힌트 패널티 값 변경 | `GameConfig.hint_penalty` |
+| 문제 수 선택 여부 | `GameConfig.qcount`, `play_quiz` |
+| 랜덤 출제 여부 | `GameConfig.shuffle`, `play_quiz` |
+| 히스토리 저장 여부 | `GameConfig.save_history` |
+| 저장 파일 경로 변경 | `GameConfig.state_path`, `GameConfig.history_path` |
+| 저장 형식 변경 | `save_data`, `load_data` |
+| 메뉴 항목 추가 | `show_menu`, `run` |
+| 입력 명령 추가 | `InputResult`, `_get_input_result` |
+| 히스토리 항목 추가 | `_save_history`, `show_history` |
+| 기본 퀴즈 변경 | `_load_default_quizzes` |
