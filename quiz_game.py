@@ -428,29 +428,12 @@ class QuizGame:
             return
 
         try:
-            # (선택 과제) 문제 수 선택
-            if self.config.qcount:
-                selected_quizzes = self._select_quizzes()
-            # (선택 과제) 랜덤 출제
-            elif self.config.shuffle:
-                selected_quizzes = self._shuffle_quizzes()
-            else:
-                selected_quizzes = self.quizzes.copy()
-
-            # 문제 총 개수
-            total = len(selected_quizzes)
+            # 문제 선택
+            quizzes = self._prepare_quiz()
             # 퀴즈 실행
-            correct, hint_used = self._run_quiz(selected_quizzes)
+            correct, hint_used = self._run_quiz(quizzes)
             # 점수 계산 및 최고 점수 갱신 확인
-            # 점수 계산
-            final_score, percentage = self._calculate_score(total, correct, hint_used)
-            # 최고 점수 갱신 여부 확인
-            is_new_best = self._update_best_score(final_score, total)
-            # (선택 과제) 히스토리 저장
-            self._save_history(final_score, total, hint_used)
-            # 결과 출력
-            self._print_result(total, correct, hint_used, percentage, is_new_best)
-
+            self._finish_quiz(len(quizzes), correct, hint_used)
         except UserExit as e:
             if not e.is_run_quiz:
                 print("\n퀴즈를 수행하지 않아 그대로 메뉴로 돌아갑니다.")
@@ -468,6 +451,26 @@ class QuizGame:
             else:
                 print(" ㄴ 퀴즈를 중단하고 메뉴로 돌아갑니다.")
 
+    def _prepare_quiz(self) -> list[Quiz]:
+         # (선택 과제) 문제 수 선택
+        if self.config.qcount:
+            selected_quizzes = self._select_quizzes()
+        # (선택 과제) 랜덤 출제
+        elif self.config.shuffle:
+            selected_quizzes = self._shuffle_quizzes()
+        else:
+            selected_quizzes = self.quizzes.copy()
+        return selected_quizzes
+
+    def _finish_quiz(self, total, correct, hint_used):
+         # 점수 계산
+        final_score, percentage = self._calculate_score(total, correct, hint_used)
+        # 최고 점수 갱신 여부 확인
+        is_new_best = self._update_best_score(final_score, total)
+        # (선택 과제) 히스토리 저장
+        self._save_history(final_score, total, hint_used)
+        # 결과 출력
+        self._print_result(total, correct, hint_used, percentage, is_new_best)
 
     def _select_quizzes(self) -> list[Quiz]:
         """

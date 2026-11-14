@@ -177,7 +177,9 @@ class Quiz:
 class QuizGame:
     def __init__(self, config: GameConfig):
         """설정 주입 후 데이터 로드"""
-
+    def show_menu(self) -> None:
+        """메뉴 출력"""
+        
     def run(self) -> None:
         """메인 루프. 메뉴를 반복 표시하고 선택에 따라 분기"""
 
@@ -212,17 +214,22 @@ run()
 ├─ show_menu()                          # 메뉴 출력
 │
 ├─ play_quiz()                          # 퀴즈 한 판 진행
-│    ├─ _select_quizzes()               # (설정 시) 문제 수 선택 (qcount)
-│    ├─ _shuffle_quizzes()              # (설정 시) 순서 섞기 (shuffle)
-│    ├─ _run_quiz()                     # N개 퀴즈 실행 --> 정답 개수, 힌트 개수 카운팅 --> 점수 계산 --> 갱신 
-│    │    └─ _ask_answer()              # 정답 입력 + 힌트 보기 처리 --> 입력한 정답, 힌트 사용 여부 리턴
-│    │         └─ _get_answer_input()   # 힌트 허용 입력 --> 입력한 정답, 힌트 사용 여부 리턴
-│    ├─ _calculate_score()              # 점수 계산 (힌트 감점)
-│    ├─ _update_best_score()            # 최고 점수 갱신
-│    ├─ _save_history()                 # (설정 시) 히스토리 저장
-│    └─ _print_result()                 # 결과 출력
+│    ├─ _prepare_quiz()              # 출제할 문제 준비
+│    │    ├─ _select_quizzes()          # (선택 과제) 문제 수 선택
+│    │    └─ _shuffle_quizzes()         # (선택 과제) 순서 섞기
+│    │
+│    ├─ _run_quiz()                     # 퀴즈 실행
+│    │    └─ _ask_answer()              # 정답 입력 + 힌트
+│    │         └─ _get_answer_input()   # 정답 입력, --> (HINT 또는 VALUE, 값)으로 리턴
+│    │
+│    └─ _finish_quiz()                  # 결과 처리
+│         ├─ _calculate_score()         # 점수 계산
+│         ├─ _update_best_score()       # 최고 점수 갱신
+│         ├─ _save_history()            # (선택 과제)히스토리 저장
+│         └─ _print_result()            # 결과 출력
 │
 ├─ add_quiz()                           # 퀴즈 추가
+│
 │    ├─ _get_str_input()                # 문제, 선택지 입력
 │    └─ _get_int_input()                # 정답 번호 입력
 │
