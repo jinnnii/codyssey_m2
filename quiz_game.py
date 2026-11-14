@@ -441,10 +441,8 @@ class QuizGame:
             total = len(selected_quizzes)
             # 퀴즈 실행
             correct, hint_used = self._run_quiz(selected_quizzes)
-            # 점수 계산
-            final_score, percentage = self._calculate_score(total, correct, hint_used)
-            # 최고 점수 갱신 여부 확인
-            is_new_best = self._update_best_score(final_score, total)
+            # 점수 계산 및 최고 점수 갱신 확인
+            final_score, percentage, is_new_best = self._calculate_score(total, correct, hint_used)
             # 히스토리 저장
             # self._save_history(final_score, total, hint_used)
             # 결과 출력
@@ -583,9 +581,9 @@ class QuizGame:
                 print(f"💡 힌트: {quiz.hint}")
 
 
-    def _calculate_score(self, total: int,correct: int, hint_used: int) -> int:
+    def _calculate_score(self, total: int,correct: int, hint_used: int) -> tuple[float, float, bool]:
         """
-        점수를 계산합니다.
+        점수를 계산하고, 최고 점수는 갱신하여 저장
 
         args:
             total: 문제 총 개수
@@ -595,6 +593,7 @@ class QuizGame:
         returns:
             final_score: 최종 점수
             percentage: 정답 비율(%)
+            is_new_best: 최고 갱신 여부
         """
 
         # 문제가 0개면 0으로 나눌 수 없으므로 점수는 0으로 둔다.
@@ -608,35 +607,21 @@ class QuizGame:
         final_score = max(0.0, correct - (hint_used * self.config.hint_penalty))
         # 정답 비율(%) 계산, 소수점을 버리고 정수로 표시
         percentage = round((final_score / total) * 100, 1) if total > 0 else 0.0
-        return final_score, percentage
 
-    def _update_best_score(self, score: float, total: int) -> None:
-        """
-        최고 점수를 갱신합니다.
 
-        args:
-            score: 최종 점수
-            total: 문제 총 개수
-        returns:
-            is_new_best: 최고 점수 갱신 여부
-        """
-        if total ==0:
-            return
-
-        # 현재 정답 비율 계산
-        current_ratio = score / total
-        # 기존 최고 점수 비율 계산
+        # 최고 점수 갱신
         best_ratio = (self.best_score / self.best_total) if self.best_total > 0 else 0
 
-        # 현재 점수 비율이 최고 점수를 넘지 못하는 경우 그대로 리턴
-        if current_ratio <= best_ratio:
-            return
+        is_new_best = False
+        if percentage > best_ratio:
+            is_new_best = True
+            self.best_score = final_score
+            self.best_total = total
+            # 최고 점수, 문제 수 저장
+            self.save_data()
 
-        self.best_score = score
-        self.best_total = total
 
-        # 최고 점수, 문제 수 저장
-        self.save_data()
+        return final_score, percentage, is_new_best
 
     def _print_result(self, total: int, correct: int, hint_used: int, percentage: int, is_new_best: bool) -> None:
         """
@@ -723,6 +708,19 @@ class QuizGame:
             print(f"[{i}] {quiz.question}")
         print("-" * 40)
 
+    def show_score(self) -> None:
+        """
+        최고 점수를 출력합니다.
+
+        best_total이 0이면 아직 퀴즈를 끝까지 풀어 기록이 생긴 적이 없습니다.
+        """
+        print("\n" + "=" * 40)
+        if self.best_total == 0:
+            print(" 아직 퀴즈를 풀지 않았습니다.")
+        else:
+            print(f" 최고 점수: {self._format_score()}")
+        print("=" * 40)
+
     def run(self) -> None:
         """
         게임의 메인 루프입니다. 종료를 고르기 전까지 메뉴를 반복합니다.
@@ -750,11 +748,9 @@ class QuizGame:
                 elif choice == 3:
                     self.delete_quiz()
                 elif choice == 4:
-                    # todo
-                    return
+                    self.list_quizzes()
                 elif choice == 5:
-                    # todo
-                    return
+                    self.show_score()
                 elif choice == 6:
                     # todo
                     return
