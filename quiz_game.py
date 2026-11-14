@@ -13,10 +13,39 @@ QuizGame 클래스 정의 파일
 
 from quiz import Quiz  # quiz.py 파일에서 Quiz 클래스 가져오기
 from config import GameConfig
+from input_result import InputResult
 
 import json
 import os
 import sys
+from typing import List, Optional
+
+class UserExit(Exception):
+    """
+    사용자가 퀴즈 진행 중 나가기(q)를 선택했을 때 발생하는 예외 처리
+
+    단순히 메뉴로 돌아가는 것 외에도,
+    지금까지 푼 문제 수, 정답 수, 힌트 사용 횟수를 함께 전달해서 중간 저장 여부를 판단할 수 있게 한다.
+    """
+
+    def __init__(self, total: int = 0, correct: int = 0, hint_used: int = 0, curr_idx: int = 0):
+        self.total = total  # 문제 총 개수
+        self.correct = correct  # 정답 개수
+        self.curr_idx = curr_idx # 현재 문제 위치
+        self.hint_used = hint_used # 힌트 사용 횟수
+        super().__init__()
+
+    @property
+    def is_run_quiz(self) -> bool:
+        """
+        실제로 문제를 하나 이상 풀었는지 여부.
+
+        curr_idx가 1보다 크면 최소 한 문제는 진행한 것으로 본다.
+        (문제를 하나도 안 풀고 바로 나간 경우와 구분)
+        """
+        return self.total > 0 and self.curr_idx > 1
+
+
 
 class QuizGame:
     """
@@ -178,6 +207,211 @@ class QuizGame:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except IOError as e:
             print(f"⚠️ 데이터 저장 중 오류가 발생했습니다: {e}")
+    
+    def _format_score(self) -> str:
+        """
+        최고 점수를 화면에 보여줄 문자열로 만들어 반환
+        퍼센트는 소수점을 버리고 정수로 표시
+
+        """
+        percentage = round((self.best_score / self.best_total) * 100, 1) if self.best_total > 0 else 0.0
+        return f"{percentage}점 ({self.best_score}/{self.best_total})"
+
+
+    def _get_input_result(self, user_input: str,  hint_yn: bool = False) -> InputResult:
+        """
+        사용자 입력 문자열을 해석해서 InputResult로 변환한다.
+
+        InputResult.from_input()으로 1차 분류한 뒤,
+        현재 상황(hint_yn)에 따라 실제로 어떻게 처리할지 결정한다.
+
+        Args:
+            user_input: 사용자가 입력한 문자열
+            hint_yn: 힌트 입력을 허용할지 여부
+                    (퀴즈 정답 입력 시에만 True)
+
+        Returns:
+            InputResult: 처리된 결과
+                - HINT: 힌트 요청 (hint_yn=True일 때만)
+                - VALUE: 일반 입력
+                - 그 외는 이 메서드 안에서 처리되거나 예외 발생
+
+        Raises:
+            UserExit: "q" 입력 시 발생. 메뉴로 돌아간다.
+        """
+
+        # 문자열 입력 처리 결과에 따라 분기
+        # 입력 문자열을 InputResult로 변환
+        result = InputResult.from_input(user_input)
+
+        # 힌트 허용 + "h" 입력인 경우
+        if hint_yn and result == InputResult.HINT:
+            return result
+
+        # "q" → 현재 작업 취소 (메뉴로)
+        elif result == InputResult.QUIT:
+            raise UserExit()
+
+        # "exit" → 프로그램 완전 종료
+        elif result == InputResult.EXIT:
+            self._handle_exit()
+
+        # "help" → 약어 안내 출력
+        elif result == InputResult.HELP:
+            self._print_abbreviations()
+
+        # 일반 입력 (숫자, 문제 텍스트 등)
+        elif result == InputResult.VALUE:
+            return result
+
+        # 그 외 (예상치 못한 경우) → 일반 입력으로 처리
+        else:
+            return InputResult.VALUE
+
+
+    def _get_bool_input(self, prompt: str) -> bool:
+        """
+        참/거짓을 입력받을 때까지 다시 물어봅니다.
+        """
+        while True:
+            user_input = self._get_str_input(prompt)
+            if user_input.strip().lower() == "y":
+                return True
+            elif user_input.strip().lower() == "n":
+                return False
+            else:
+                print("⚠️ 올바른 입력이 아닙니다. 다시 입력해주세요.")
+            
+
+    def _get_str_input(self, prompt: str, max_length: int = 100, allow_empty: bool = False) -> str:
+        """
+        문자열을 입력받을 때까지 다시 물어봅니다.
+
+        args:
+            prompt: 사용자에게 보여줄 입력 안내 메시지
+            max_length: 최대 문자 길이
+
+        returns:
+            str: 입력 문자열
+
+        raises:
+            KeyboardInterrupt: Ctrl+C를 눌렀을 때
+            EOFError: 입력 스트림이 끊어졌을 때
+            UserExit: 나가기를 요청했으면 메뉴로 돌아간다.
+        """
+
+        while True:
+            try:
+                # 입력 문자열 입력 받기
+                user_input = input(prompt).strip()
+                # 입력 문자열로 InputResult 찾기
+                result = self._get_input_result(user_input)
+
+                # 필수 입력일 때, 입력이 비어 있으면 안내 메시지 출력 후 재입력
+                if not allow_empty and result is InputResult.EMPTY:
+                    print("⚠️ 입력이 비어 있습니다. 다시 입력해주세요.")
+                    continue
+
+                # 입력 문자열 길이 체크
+                if len(user_input) <= max_length:
+                    return user_input # 정상 입력이면 입력 문자열을 반환한다.
+
+                # 입력 문자열이 최대 글자수를 초과 시, 안내 메시지 출력 후 재입력
+                print(f"⚠️ 입력이 {max_length}자 이하여야 합니다. 다시 입력해주세요.")
+                
+            except (KeyboardInterrupt, EOFError):
+                self._handle_exit() # 종료를 요청했으면 프로그램을 종료한다.
+
+    def _read_int(self, prompt: str, min_val: int, max_val: int, hint_yn: bool = False) -> tuple[InputResult, Optional[int]]:
+        """
+        범위 안의 정수를 입력받을 때까지 다시 물어봅니다.
+
+        잘못된 입력은 예외로 프로그램을 끝내지 않고, 이유를 알려 준 뒤 같은 질문을 반복합니다.
+
+        숫자 입력 케이스 처리:
+            - 입력 앞뒤 공백 제거 후 처리
+            - 숫자 변환 실패 (예: abc) 시 안내 메시지 출력 후 재입력 복귀
+            - 허용 범위 밖 숫자 입력 시 안내 메시지 출력 후 재입력 복귀
+            - 빈 입력(그냥 Enter) 시 안내 메시지 출력 후 재입력 복귀
+
+        프로그램 실행 중 예외 처리:
+            - Ctrl+C(KeyboardInterrupt)나 입력 스트림이 끊기는 경우(EOFError)는 여기서 저장한 뒤 프로그램을 종료
+
+        args:
+            prompt: 사용자에게 보여줄 입력 안내 메시지
+            min_val: 허용되는 최소값
+            max_val: 허용되는 최대값
+
+        returns:
+            (InputResult.VALUE, 숫자)   → 정상 입력
+            (InputResult.HINT, None)    → h 또는 힌트. hint_yn일 때만
+        """
+        while True:
+            try:
+                user_input = input(prompt).strip()  # 앞뒤 공백 제거
+
+                # 입력 문자열로 InputResult 찾기
+                result = self._get_input_result(user_input, hint_yn=hint_yn)
+
+                # 빈 입력 시 안내 메시지 출력
+                if result is InputResult.EMPTY: 
+                    print("⚠️ 입력이 비어 있습니다. 다시 입력해주세요.")
+                    continue
+
+                # 문자열 입력 처리 결과에 따라 분기
+                if result is not InputResult.VALUE:
+                    return (result, None)
+
+                # 문자열에서 정수 변환. 실패하면 ValueError 예외 발생
+                value = int(user_input)
+                
+                # 범위 내 숫자 입력 시, 반환
+                if min_val <= value <= max_val:
+                    return (result, value)
+                else:
+                    # 범위 밖의 숫자를 입력했을 때 안내 메시지 출력
+                    print(f"⚠️ {min_val}~{max_val} 사이의 숫자를 입력해주세요.")
+
+            except ValueError:
+                # 숫자 변환 실패 시 안내 메시지 출력
+                print("⚠️ 숫자만 입력해주세요.")
+            except (KeyboardInterrupt, EOFError):
+                # 예외 처리
+                self._handle_exit()
+
+    def _handle_exit(self) -> None:
+        """
+        프로그램을 안전하게 종료합니다.
+        """
+        print("\n\n프로그램을 안전하게 종료합니다.")
+        self.save_data()
+        sys.exit(0)
+
+    def _get_int_input(self, prompt: str, min_val: int, max_val: int) -> int:
+        """
+        숫자를 입력받을 때까지 다시 물어봅니다.
+        """
+        _, value = self._read_int(prompt, min_val, max_val)
+        return value
+
+    def get_answer_input(self, prompt: str) -> tuple[InputResult, Optional[int]]:
+        """
+        정답 입력 받기
+        """
+        return self._read_int(prompt, 1, 4, hint_yn=self.config.hint)
+
+    def _print_abbreviations(self) -> None:
+        """
+        약어를 출력합니다.
+        """
+        print("\n" + "=" * 40)
+        print(" 약어 목록")
+        print("=" * 40)
+        print(f" q: 메누로 나가기")
+        print(f" h: (정답 입력 시) 힌트 보기")
+        print(f" help: 도움말")
+        print(f" exit: 종료")
+        print("=" * 40)
 
 
     def run(self) -> None:
@@ -199,7 +433,7 @@ class QuizGame:
         while True:
             try:
                 self.show_menu()
-                choice = input("선택: ")
+                choice = self._get_int_input("선택: ", 1, 8)
                 if choice == 1:
                     # todo
                     return
@@ -224,6 +458,7 @@ class QuizGame:
                 elif choice == 8:
                     print("\n👋 게임을 종료합니다. 데이터가 저장되었습니다.")
                     return
-            except:
+            except UserExit:
                 print("\n\n프로그램을 안전하게 종료합니다.")
+                self.save_data()
                 break
