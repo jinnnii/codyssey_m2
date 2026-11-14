@@ -48,7 +48,22 @@ game.run()
 - 설정 데이터 클래스를 만들어 실행
 
 - 실행 화면
-![alt text](docs/menu.png)
+![프로그램 실행 화면](docs/menu.png)
+
+- 퀴즈 풀기
+![퀴즈 풀기 화면](docs/play.png)
+
+- 퀴즈 추가
+![퀴즈 추가 화면](docs/add_quiz.png)
+
+- 퀴즈 삭제
+![퀴즈 삭제 화면](docs/delete_quiz.png)
+
+- 점수 확인
+![점수 확인 화면](docs/score.png)
+
+- 히스토리 
+![히스토리 화면](docs/history.png)
 
 
 ## 기능 목록
@@ -285,7 +300,7 @@ def handle_signal(signum, frame):
 
 signal.signal(signal.SIGINT, handle_signal)
 signal.signal(signal.SIGTERM, handle_signal)
-
+```
 
 ## 부가 설명
 ### 1. `InputResult` 를 만든 이유
@@ -431,7 +446,7 @@ git push
 git log --oneline --graph --all
 ```
 - Git 로그 출력 캡처
-![Git 로그 출력](docs/git_logs.png)
+![git log --graph 출력](docs/git_logs.png)
 
 ## 과제 목표
 
