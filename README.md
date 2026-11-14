@@ -47,6 +47,9 @@ game.run()
 ```
 - 설정 데이터 클래스를 만들어 실행
 
+- 실행 화면
+![alt text](docs/menu.png)
+
 
 ## 기능 목록
 | 번호 | 기능 | 설명 |
@@ -258,6 +261,139 @@ class InputResult(Enum):
     HELP = "help"    # 도움말
 ```
 
+## 종료 처리
+프로그램 종료 시 데이터 손실을 방지하기 위해 아래와 같이 처리한다.
+
+| 상황 | 처리 |
+|------|------|
+| 메뉴에서 종료 선택 | `save_data()` 호출 후 종료 |
+| `exit` 입력 | `save_data()` 호출 후 종료 |
+| `Ctrl+C` (`KeyboardInterrupt`) | `save_data()` 호출 후 종료 |
+| `EOFError` | `save_data()` 호출 후 종료 |
+
+현재는 `KeyboardInterrupt`와 `EOFError`로 종료를 처리한다.  
+`SIGINT`(Ctrl+C)는 `KeyboardInterrupt`로 잡히므로 별도 `signal` 핸들러 없이도 저장 후 종료된다.
+`SIGTERM` 등 다른 시그널까지 처리하려면 아래처럼 확장할 수 있다.
+
+```python
+import signal
+
+def handle_signal(signum, frame):
+    print("\n종료 시그널을 받았습니다. 저장 후 종료합니다.")
+    game.save_data()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_signal)
+signal.signal(signal.SIGTERM, handle_signal)
+
+
+## 부가 설명
+### 1. `InputResult` 를 만든 이유
+**목적**  
+- 선택 과제인 힌트 기능이 추가되면서 `h`(힌트), `q`(나가기) 같은 특수 입력을 처리해야 했다.  
+- 문자열을 직접 비교하는 대신, 입력의 종류를 명확히 구분하기 위해 `InputResult`를 도입했다.
+
+**변경 내용**  
+- 이전: `if user_input == "q"`처럼 문자열을 직접 비교
+- 이후: `if result == InputResult.HINT` 등으로 비교
+
+**효과**  
+- `"q"`, `"h"` 같은 문자열이 코드에 흩어지지 않음
+- 입력 결과가 `(InputResult, 값)` 형태로 일관되게 반환됨
+- 오타나 대소문자 차이로 인한 실수를 줄일 수 있다.
+- 특수 명령을 추가하거나 변경할 때 Enum만 수정하면 된다.
+- 함수 반환값의 의미가 분명해진다.
+
+### 2. 입력 처리 흐름
+
+**목적**  
+메뉴 선택, 퀴즈 정답, 문제 추가 등 여러 곳에서 입력을 받아야 해서  입력 검증과 특수 명령 처리를 공통 메서드로 분리했다.
+
+**효과**  
+- 빈 입력, 범위 초과, `q`/`h` 처리가 한곳에서 이루어짐
+- 입력 관련 버그를 수정할 때 해당 메서드만 보면 됨
+- 퀴즈 정답 입력처럼 힌트가 필요한 경우와 그렇지 않은 경우를 나눌 수 있음
+
+| 메서드 | 하는 일 |
+|--------|---------|
+| `_get_input_result` | 입력을 해석해서 `q`, `h`, `exit` 등을 구분 |
+| `_read_int` | 범위 안의 숫자를 입력받을 때까지 반복 |
+| `_get_int_input` | 숫자만 필요할 때 사용 (메뉴, 문제 수 등) |
+| `_get_answer_input` | 퀴즈 정답 입력 (힌트 허용) |
+| `_get_str_input` | 문자열 입력 (문제, 선택지 등) |
+| `_get_bool_input` | y/n 입력 |
+
+
+**호출 예시**
+- 메뉴 번호를 고를 때
+
+    `_get_int_input("선택: ", 1, 8) `→ `_read_int("선택: ", 1, 8)`  
+    &nbsp;&nbsp;&nbsp;&nbsp;1. 입력 받기 (`input()`)    
+    &nbsp;&nbsp;&nbsp;&nbsp;2. `_get_input_result` : `q`, `exit` 등 특수 입력 & 빈 문자열인지 확인  
+    &nbsp;&nbsp;&nbsp;&nbsp;3. 숫자로 변환 (`int(str)`)    
+    &nbsp;&nbsp;&nbsp;&nbsp;4. 1~8 범위인지 확인
+
+- 퀴즈 정답을 입력할 때  
+    `_get_answer_input("정답 입력: ")` → `_read_int("정답 입력: ", 1, 4, hint_yn=True)`    
+    &nbsp;&nbsp;&nbsp;&nbsp;1. 입력 받기 (`input()`)  
+    &nbsp;&nbsp;&nbsp;&nbsp;2. `_get_input_result` : `q`, `exit` 등 특수 입력 & 빈 문자열인지 확인 + `h`면 힌트 요청으로 반환  
+    &nbsp;&nbsp;&nbsp;&nbsp;3. 숫자로 변환 (`int(str)`)  
+    &nbsp;&nbsp;&nbsp;&nbsp;4. 1~4 범위인지 확인
+
+- 문제를 추가할 때  
+    `_get_str_input("문제를 입력하세요: ", allow_empty=False)`  
+    &nbsp;&nbsp;&nbsp;&nbsp;1. 입력 받기 (`input()`)  
+    &nbsp;&nbsp;&nbsp;&nbsp;2. 필수 입력(`allow_empty=False`)인지 확인 후 반환   
+    &nbsp;&nbsp;&nbsp;&nbsp;2. `_get_input_result` : `q`, `exit` 등 특수 입력인지 확인 & 빈 문자열인지 확인  
+    &nbsp;&nbsp;&nbsp;&nbsp;3. 길이 제한 확인 후 반환  
+
+
+- 저장 여부를 확인할 때
+    `_get_bool_input("저장하시겠습니까? (y/n): ")`  
+    → `_get_str_input`으로 문자열을 받은 뒤  
+    &nbsp;&nbsp;&nbsp;&nbsp;1. `_get_str_input` 내부에서 `_get_input_result`로 특수 입력 확인  
+    &nbsp;&nbsp;&nbsp;&nbsp;2. `"y"`면 True, `"n"`이면 False 반환  
+    &nbsp;&nbsp;&nbsp;&nbsp;3. 그 외에는 다시 물어봄
+
+### 3. `UserExit`: 예외 처리 
+```python
+class UserExit(Exception):
+    """
+    사용자가 퀴즈 진행 중 나가기(q)를 선택했을 때 발생하는 예외 처리
+    단순히 메뉴로 돌아가는 것 외에도,
+    지금까지 푼 문제 수, 정답 수, 힌트 사용 횟수를 함께 전달해서 중간 저장 여부를 판단할 수 있게 한다.
+    """
+
+    def __init__(self, total: int = 0, correct: int = 0, hint_used: int = 0, curr_idx: int = 0):
+        self.total = total  # 문제 총 개수
+        self.correct = correct  # 정답 개수
+        self.curr_idx = curr_idx # 현재 문제 위치
+        self.hint_used = hint_used # 힌트 사용 횟수
+        super().__init__()
+
+```
+**목적**  
+퀴즈를 풀다가 `q`를 눌렀을 때, 그냥 종료하지 않고 메뉴로 돌아가면서  
+지금까지의 진행 상황도 함께 전달하기 위해 만들었다.
+
+**처리 내용**  
+- `q` 입력 시 `UserExit` 발생
+- 푼 문제 수, 정답 수, 힌트 사용 횟수를 예외에 담음
+- `play_quiz`에서 예외를 잡아서 중간 저장 여부를 물어봄
+- `y` 입력 시 지금까지의 결과를 히스토리에 저장
+
+**효과**  
+- 중간에 나가도 진행 상황을 잃지 않는다.
+- 저장 여부를 사용자가 선택할 수 있다.
+- 메뉴로 자연스럽게 돌아갈 수 있다.
+
+**동작 원리**
+- q를 입력하면 raise UserExit(total, correct, hint_used, i)로 예외를 발생시킨다.
+- 예외 객체 안에 지금까지의 진행 상황을 담는다.
+- play_quiz의 except UserExit as e:에서 이 예외를 잡는다.
+- e.correct, e.hint_used 등으로 진행 상황을 꺼내서 사용한다.
+- 저장 여부를 물어본 뒤, 메뉴로 돌아간다.
+
 ## Git
 - 기능 단위로 커밋하고 브랜치를 사용했다.
 
@@ -267,7 +403,33 @@ git switch -b feature/play-quiz
 git checkout main
 git merge feature/play-quiz
 ```
+**로그**
+- 10개 이상의 커밋, 병합 증적
 
+| 순서 | 커밋 | 메시지 | 원래 브랜치 |
+| --- | --- | --- | --- |
+| 1 | 963b6af | feat: 프로젝트 초기 구조 및 .gitignore 설정 | main |
+| 2 | 0f37f75 | feat: Quiz 클래스 정의 | feature/play-quiz |
+| 3 | 83a50fd | feat: GameConfig 설정 클래스 추가 | feature/play-quiz |
+| 4 | 72097b0 | feat: QuizGame 기본 구조 및 메뉴 | feature/play-quiz |
+| 5 | a4617cd | feat: 기본 퀴즈 데이터 로드 및 저장 | feature/play-quiz |
+| 6 | 4879c14 | fix: GameConfig 오타 수정 | feature/play-quiz |
+| 7 | 57c9034 | feat: 입력 처리 구현 + 도움말 | feature/play-quiz |
+| 8 | a2f2d6f | feat: 퀴즈 풀기 기능 | feature/play-quiz |
+| 9 | 2b3aea4 | feat: 퀴즈 추가 기능 | feature/play-quiz |
+| 10 | 2305e93 | feat: 퀴즈 목록 및 삭제 | feature/play-quiz |
+| 11 | 26062e9 | feat: 점수 확인 및 최고 점수 갱신 | feature/play-quiz |
+| 12 | 67c2939 | feat: 히스토리 기능 | feature/play-quiz |
+| 13 | 7e2a4b5 | feat: main 추가 | feature/play-quiz |
+| 14 | 649bcb8 | feat: 데이터 파일 추가 | feature/play-quiz |
+| 15 | 420e873 | docs: README 초안 작성 | feature/play-quiz |
+| 16 | 42dda02 | Merge: feature/play-quiz | main (병합) |
+
+
+```bash
+git log --oneline --graph --all
+```
+![alt text](docs/git_logs.png)
 
 ## 과제 목표
 
@@ -358,6 +520,8 @@ with open("파일명", "r", encoding="utf-8") as f:
 | `fetch` | 원격 변경 사항을 가져오기만 하고, 현재 브랜치에는 반영하지 않음 |
 | `pull` | 원격 변경 사항을 가져와서 현재 브랜치에 병합 (fetch + merge) |
 
+- clone, pull, petch 증적
+![alt text](docs/git_clone_fetch_pull.png)
 
 **checkout vs switch**
 | 명령어 | 설명 |
@@ -365,3 +529,37 @@ with open("파일명", "r", encoding="utf-8") as f:
 | `checkout` | 예전부터 쓰던 명령. 브랜치 전환 + 파일 복원 등 여러 용도 |
 | `switch` | 브랜치 전환만 담당|
 - 요즘은 `switch`를 쓰는 경우가 늘고 있지만, 기존 자료나 습관 때문에 `checkout`도 여전히 많이 사용된다.
+
+**커밋 메시지 규칙**
+
+```
+타입: 설명
+
+예시:
+feat: 퀴즈 풀기 기능 구현
+fix: GameConfig 오타 수정
+docs: README 초안 작성
+refactor: 입력 처리 메서드 분리
+```
+
+| 타입 | 의미 |
+| --- | --- |
+| feat | 새로운 기능 |
+| fix | 버그 수정 |
+| docs | 문서 수정 |
+| refactor | 리팩토링 |
+| chore | 설정, 빌드 등 |
+
+## 대량 데이터 고려사항
+현재 구조는 퀴즈를 메모리에 모두 올린 뒤 처리한다.
+퀴즈가 1000개 이상일 경우 아래 문제가 발생할 수 있다.
+
+| 항목 | 예상 문제 | 개선 방안 |
+| --- | --- | --- |
+| 메모리 | 모든 퀴즈를 list에 보관 | 필요한 만큼만 로드 (페이징) |
+| 검색 | 목록 출력 시 전체를 순회 | 인덱스 또는 DB 사용 고려 |
+| 저장 | 매번 전체 JSON을 다시 씀 | 변경된 부분만 저장하거나 스트리밍 방식 |
+| 출제 | random.sample로 전체에서 추출 | 개수가 많아도 동작은 하나, 메모리 점유는 동일 |
+
+현재 학습용 프로젝트에서는 퀴즈 수가 적으므로,
+메모리에 모두 로드하는 방식으로 충분하다.
