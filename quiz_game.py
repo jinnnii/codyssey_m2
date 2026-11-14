@@ -261,6 +261,9 @@ class QuizGame:
         elif result == InputResult.HELP:
             self._print_abbreviations()
 
+        # 문자열이 비어있을 때
+        elif result == InputResult.EMPTY:
+            return result
         # 일반 입력 (숫자, 문제 텍스트 등)
         elif result == InputResult.VALUE:
             return result
@@ -307,6 +310,8 @@ class QuizGame:
                 user_input = input(prompt).strip()
                 # 입력 문자열로 InputResult 찾기
                 result = self._get_input_result(user_input)
+
+                print(result, ">>>")
 
                 # 필수 입력일 때, 입력이 비어 있으면 안내 메시지 출력 후 재입력
                 if not allow_empty and result is InputResult.EMPTY:
@@ -653,6 +658,37 @@ class QuizGame:
             print(" 새로운 최고 점수입니다!")
         print("=" * 40)
 
+
+    def add_quiz(self) -> None:
+        """
+        문제, 선택지 4개, 정답 번호를 받아 퀴즈를 하나 추가합니다.
+
+        문제나 선택지가 비어 있으면 추가를 취소합니다.
+        일부만 입력된 상태는 저장하지 않아서, 선택지가 모자란 문제가 생기지 않습니다.
+        모든 입력이 끝난 뒤에만 목록에 넣고 state.json에 저장합니다.
+        """
+        print("\n 새로운 퀴즈를 추가합니다.\n")
+
+        question = self._get_str_input("문제를 입력하세요: ").strip()
+
+        choices = []
+        for i in range(1, 5):
+            choice = self._get_str_input(f"선택지 {i}: ").strip()
+            if not choice:
+                # 앞 선택지만 있고 뒤가 비면 문제가 불완전하므로 전부 버린다.
+                print("⚠️ 선택지를 모두 입력해주세요.")
+                return
+            choices.append(choice)
+
+        answer = self._get_int_input("정답 번호 : ", 1, 4)
+        hint_text = self._get_str_input("힌트 (없으면 Enter): ", allow_empty=True).strip()
+        new_quiz = Quiz(question, choices, answer, hint_text or None)
+        self.quizzes.append(new_quiz)
+        self.save_data()
+        print("\n 퀴즈가 추가되었습니다!")
+
+
+
     def run(self) -> None:
         """
         게임의 메인 루프입니다. 종료를 고르기 전까지 메뉴를 반복합니다.
@@ -676,8 +712,7 @@ class QuizGame:
                 if choice == 1:
                     self.play_quiz()
                 elif choice == 2:
-                    # todo
-                    return
+                    self.add_quiz()
                 elif choice == 3:
                     # todo
                     return
