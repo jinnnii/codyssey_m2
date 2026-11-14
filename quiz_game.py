@@ -20,6 +20,7 @@ import os
 import sys
 from typing import List, Optional
 import random
+from datetime import datetime
 
 class UserExit(Exception):
     """
@@ -72,6 +73,7 @@ class QuizGame:
         self.history: List[dict] = []
         self.config: GameConfig = config or GameConfig()
         self.load_data() # 프로그램 시작하자마자 저장된 데이터 불러오기
+        self.load_history() # 프로그램 시작하자마자 저장된 이력 불러오기
 
 
     def show_menu(self) -> None:
@@ -311,8 +313,6 @@ class QuizGame:
                 # 입력 문자열로 InputResult 찾기
                 result = self._get_input_result(user_input)
 
-                print(result, ">>>")
-
                 # 필수 입력일 때, 입력이 비어 있으면 안내 메시지 출력 후 재입력
                 if not allow_empty and result is InputResult.EMPTY:
                     print("⚠️ 입력이 비어 있습니다. 다시 입력해주세요.")
@@ -442,9 +442,12 @@ class QuizGame:
             # 퀴즈 실행
             correct, hint_used = self._run_quiz(selected_quizzes)
             # 점수 계산 및 최고 점수 갱신 확인
-            final_score, percentage, is_new_best = self._calculate_score(total, correct, hint_used)
-            # 히스토리 저장
-            # self._save_history(final_score, total, hint_used)
+            # 점수 계산
+            final_score, percentage = self._calculate_score(total, correct, hint_used)
+            # 최고 점수 갱신 여부 확인
+            is_new_best = self._update_best_score(final_score, total)
+            # (선택 과제) 히스토리 저장
+            self._save_history(final_score, total, hint_used)
             # 결과 출력
             self._print_result(total, correct, hint_used, percentage, is_new_best)
 
@@ -453,14 +456,17 @@ class QuizGame:
                 print("\n퀴즈를 수행하지 않아 그대로 메뉴로 돌아갑니다.")
                 return
 
-            # # 중간 이력 저장 
-            # save_history = self._get_bool_input(f"{e.curr_idx -1 }번째 문제까지 퀴즈를 풀었습니다. 퀴즈 결과를 히스토리에 저장하시겠습니까? (y/n): ")
-            # if save_history:
-            #     print(" ㄴ 중간 퀴즈 결과를 저장합니다...\n")
-            #     final_score, _ = self._calculate_score(e.curr_idx -1, e.correct, e.hint_used)
-            #     self._save_history(final_score, e.curr_idx -1, e.hint_used)
-            # else:
-            #     print(" ㄴ 퀴즈를 중단하고 메뉴로 돌아갑니다.")
+            if not self.config.save_history:
+                return
+
+            # 중간 이력 저장 
+            save_history = self._get_bool_input(f"{e.curr_idx -1 }번째 문제까지 퀴즈를 풀었습니다. 퀴즈 결과를 히스토리에 저장하시겠습니까? (y/n): ")
+            if save_history:
+                print(" ㄴ 중간 퀴즈 결과를 저장합니다...\n")
+                final_score, _ = self._calculate_score(e.curr_idx -1, e.correct, e.hint_used)
+                self._save_history(final_score, e.curr_idx -1, e.hint_used)
+            else:
+                print(" ㄴ 퀴즈를 중단하고 메뉴로 돌아갑니다.")
 
 
     def _select_quizzes(self) -> list[Quiz]:
@@ -581,9 +587,9 @@ class QuizGame:
                 print(f"💡 힌트: {quiz.hint}")
 
 
-    def _calculate_score(self, total: int,correct: int, hint_used: int) -> tuple[float, float, bool]:
+    def _calculate_score(self, total: int,correct: int, hint_used: int) -> int:
         """
-        점수를 계산하고, 최고 점수는 갱신하여 저장
+        점수를 계산합니다.
 
         args:
             total: 문제 총 개수
@@ -593,7 +599,6 @@ class QuizGame:
         returns:
             final_score: 최종 점수
             percentage: 정답 비율(%)
-            is_new_best: 최고 갱신 여부
         """
 
         # 문제가 0개면 0으로 나눌 수 없으므로 점수는 0으로 둔다.
@@ -607,21 +612,33 @@ class QuizGame:
         final_score = max(0.0, correct - (hint_used * self.config.hint_penalty))
         # 정답 비율(%) 계산, 소수점을 버리고 정수로 표시
         percentage = round((final_score / total) * 100, 1) if total > 0 else 0.0
+        return final_score, percentage
 
+    def _update_best_score(self, score: float, total: int) -> None:
+        """
+        최고 점수를 갱신합니다.
 
-        # 최고 점수 갱신
+        args:
+            score: 최종 점수
+            total: 문제 총 개수
+        returns:
+            is_new_best: 최고 점수 갱신 여부
+        """
+        if total ==0:
+            return
+
+        # 현재 정답 비율 계산
+        current_ratio = score / total
+        # 기존 최고 점수 비율 계산
         best_ratio = (self.best_score / self.best_total) if self.best_total > 0 else 0
 
-        is_new_best = False
-        if percentage > best_ratio:
-            is_new_best = True
-            self.best_score = final_score
-            self.best_total = total
-            # 최고 점수, 문제 수 저장
-            self.save_data()
+        if current_ratio <= best_ratio:
+            return
 
+        self.best_score = score
+        self.best_total = total
+        self.save_data()
 
-        return final_score, percentage, is_new_best
 
     def _print_result(self, total: int, correct: int, hint_used: int, percentage: int, is_new_best: bool) -> None:
         """
@@ -721,6 +738,67 @@ class QuizGame:
             print(f" 최고 점수: {self._format_score()}")
         print("=" * 40)
 
+    def _save_history(self, score: float,  total: int, hint_used: int) -> None:
+        """
+        히스토리를 저장합니다.
+
+        args:
+            score: 최종 점수
+            total: 문제 총 개수
+            hint_used: 힌트 사용 횟수
+        """
+
+        if not self.config.save_history:
+            return
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        history = {
+            "date": now,
+            "total_questions": total,
+            "score": round(score, 1),
+            "hint_used": hint_used,
+        }
+
+        # 히스토리 최신순으로 저장
+        self.history.insert(0, history)
+
+        try:
+            with open(self.config.history_path, "w", encoding="utf-8") as f:
+                json.dump(self.history, f, ensure_ascii=False, indent=2)
+                print(f" 히스토리가 저장되었습니다. {now}")
+        except IOError as e:
+            print(f"⚠️ 히스토리 저장 중 오류가 발생했습니다: {e}")
+
+    def load_history(self) -> None:
+        """
+        히스토리를 불러옵니다.
+        """
+        try:
+            with open(self.config.history_path, "r", encoding="utf-8") as f:
+                self.history = json.load(f)
+        except FileNotFoundError:
+            self.history = []
+
+    def show_history(self) -> None:
+        """
+        히스토리를 출력합니다.
+        """
+
+        if not self.config.save_history:
+            print("\n 히스토리 저장이 비활성화되어 있습니다.")
+            return
+
+        if not self.history:
+            print("\n 히스토리가 없습니다.")
+            return
+        print("\n" + "=" * 40)
+        print(" 히스토리")
+        print("=" * 40)
+        for idx, h in enumerate(self.history, 1):
+            print(f"{idx}. 날짜: {h['date']} | 푼 문제: {h['total_questions']}문제 | 점수: {h['score']}점 | 힌트 사용 횟수: {h['hint_used']}회")
+        print("-" * 40)
+
+
     def run(self) -> None:
         """
         게임의 메인 루프입니다. 종료를 고르기 전까지 메뉴를 반복합니다.
@@ -752,11 +830,9 @@ class QuizGame:
                 elif choice == 5:
                     self.show_score()
                 elif choice == 6:
-                    # todo
-                    return
+                    self.show_history()
                 elif choice == 7:
-                    # todo
-                    return
+                     self._print_abbreviations()
                 elif choice == 8:
                     print("\n👋 게임을 종료합니다. 데이터가 저장되었습니다.")
                     return
