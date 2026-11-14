@@ -53,13 +53,13 @@ game.run()
 - 퀴즈 풀기
 ![퀴즈 풀기 화면](docs/play.png)
 
-- 퀴즈 추가
+- 퀴즈 추가  
 ![퀴즈 추가 화면](docs/add_quiz.png)
 
-- 퀴즈 삭제
+- 퀴즈 삭제  
 ![퀴즈 삭제 화면](docs/delete_quiz.png)
 
-- 점수 확인
+- 점수 확인  
 ![점수 확인 화면](docs/score.png)
 
 - 히스토리 
@@ -206,64 +206,89 @@ class QuizGame:
         """state.json에 퀴즈와 점수 저장"""
 ```
 
-### 내부 메서드 (`_`)
-- 클래스 내부에서만 사용하는 메서드
-```python
-def _load_default_quizzes(self) -> None:
-    """기본 퀴즈 6개 로드"""
-
-def _run_quiz(self, quizzes) -> tuple[int, int]:
-    """퀴즈 진행. (정답 수, 힌트 사용 수) 반환"""
-
-def _ask_answer(self, quiz) -> tuple:
-    """한 문제 정답 입력 (힌트 처리 포함)"""
-
-def _select_quizzes(self) -> list:
-    """문제 수 선택 후 랜덤 추출"""
-
-def _shuffle_quizzes(self) -> list:
-    """퀴즈 순서 섞기"""
-
-def _calculate_score(self, total, correct, hint_used) -> tuple:
-    """점수 계산 (힌트 감점 반영)"""
-
-def _update_best_score(self, score, total) -> None:
-    """최고 점수 갱신"""
-
-def _print_result(self, ...) -> None:
-    """문제 체점 결과 출력"""
-
-def _save_history(self, score, total, hint_used) -> None:
-    """히스토리 저장 (최신순)"""
-
-def _read_int(self, prompt, min_val, max_val, hint_yn=False) -> tuple:
-    """숫자 입력 공통 처리"""
-
-def _get_int_input(self, prompt, min_val, max_val) -> int:
-    """숫자만 입력받기"""
-
-def _get_answer_input(self, prompt) -> tuple:
-    """정답 입력 (힌트 허용)"""
-
-def _get_str_input(self, prompt, ...) -> str:
-    """문자열 입력"""
-
-def _get_bool_input(self, prompt) -> bool:
-    """y/n 입력"""
-
-def _get_input_result(self, user_input, hint_yn=False) -> InputResult:
-    """입력을 InputResult로 변환"""
-
-def _handle_exit(self) -> None:
-    """안전 종료 (저장 후 종료)"""
-
-def _format_score(self) -> str:
-    """최고 점수를 문자열로 반환"""
-
-def _print_abbreviations(self) -> None:
-    """명령어 도움말 출력"""
+### 호출 흐름
+```
+run()
+├─ show_menu()                          # 메뉴 출력
+│
+├─ play_quiz()                          # 퀴즈 한 판 진행
+│    ├─ _select_quizzes()               # (설정 시) 문제 수 선택 (qcount)
+│    ├─ _shuffle_quizzes()              # (설정 시) 순서 섞기 (shuffle)
+│    ├─ _run_quiz()                     # N개 퀴즈 실행 --> 정답 개수, 힌트 개수 카운팅 --> 점수 계산 --> 갱신 
+│    │    └─ _ask_answer()              # 정답 입력 + 힌트 보기 처리 --> 입력한 정답, 힌트 사용 여부 리턴
+│    │         └─ _get_answer_input()   # 힌트 허용 입력 --> 입력한 정답, 힌트 사용 여부 리턴
+│    ├─ _calculate_score()              # 점수 계산 (힌트 감점)
+│    ├─ _update_best_score()            # 최고 점수 갱신
+│    ├─ _save_history()                 # (설정 시) 히스토리 저장
+│    └─ _print_result()                 # 결과 출력
+│
+├─ add_quiz()                           # 퀴즈 추가
+│    ├─ _get_str_input()                # 문제, 선택지 입력
+│    └─ _get_int_input()                # 정답 번호 입력
+│
+├─ delete_quiz()                        # 퀴즈 삭제
+│    └─ list_quizzes()                  # 퀴즈 목록 출력
+│    └─ _get_int_input()                # 삭제할 번호 입력
+│
+├─ list_quizzes()                       # 퀴즈 목록 출력
+├─ show_score()                         # 최고 점수 출력
+├─ show_history()                       # 히스토리 출력
+├─ print_abbreviations()                # 도움말 출력
+│
+├─ 입력 처리
+│    ├─ _get_int_input()                # 숫자만 필요할 때 --> 값(숫자)만 리턴
+│    │    └─ _read_int()                # 범위 체크, 숫자 변환 --> (VALUE, 값) 으로 리턴 (힌트 제외)
+│    │         └─ _get_input_result()   # 특수 입력 처리 (q, h, exit 등) --> VALUE 리턴
+│    │
+│    ├─ _get_answer_input()             # 정답 입력 (힌트 허용), --> (HINT 또는 VALUE, 값)으로 리턴
+│    │    └─ _read_int(hint_yn=True)    # 범위 체크, 숫자 변환 --> (HINT 또는 VALUE, 값)으로 리턴
+│    │         └─ _get_input_result()   # 특수 입력 처리 (q, h, exit 등) --> HINT 또는 VALUE 리턴
+│    │
+│    ├─ _get_str_input()                # 문자열 입력: 필수 여부, 범위 체크 --> 값(문자열) 리턴
+│    │    └─ _get_input_result()        # 특수 입력 처리 (q, h, exit 등) -->  VALUE 리턴
+│    │
+│    └─ _get_bool_input()               # y/n 입력 : 'y' 또는 'n' 체크 -> True/False 리턴
+│         └─ _get_str_input()           # 문자열 입력: 필수 여부, 범위 체크 --> 값(문자열) 리턴
+│              └─ _get_input_result()   # 특수 입력 처리 (q, h, exit 등) -->  VALUE 리턴
+│
+├─ load_data() / save_data()            # state.json 읽기/쓰기
+└─ load_history() / _save_history()     # history.json 읽기/쓰기
 ```
 
+
+### 예외 처리 흐름 
+```
+사용자 입력
+│
+├─ 빈 입력 ──────────────→ (필수 입력인 경우) 안내 후 다시 입력
+├─ 숫자 아님 ────────────→ (숫자 입력인 경우) 안내 후 다시 입력
+├─ 범위 밖 ──────────────→ (숫자 입력인 경우) 안내 후 다시 입력
+│
+├─ "h"
+│    ├─ 퀴즈 정답 입력 중 ─→ 힌트 출력 (감점은 1회만)
+│    │                         └─ 같은 문제에서 다시 입력
+│    │
+│    ├─ 숫자 입력 중 ──────→ "숫자만 입력해주세요" 후 다시 입력
+│    │
+│    └─ 문자열 입력 중 ────→ 그냥 문자열 "h"로 처리
+│
+├─ "q" ──────────────────→ UserExit 발생
+│                              │
+│                              ├─ 퀴즈 중이면 → 이력 저장 여부 확인 → 메뉴로
+│                              └─ 그 외 → 메뉴로
+│
+├─ "exit" ───────────────→ save_data() → 프로그램 종료
+├─ Ctrl+C / EOF 예외 ─────→ save_data() → 프로그램 종료
+│
+└─ 정상 입력 ────────────→ 해당 기능 실행파일 관련
+│
+├─ state.json 없음 ──────→ 기본 퀴즈 로드 → save_data()
+├─ state.json 손상 ──────→ 안내 → 기본 퀴즈로 복구 → save_data()
+└─ state.json 저장 실패 ──→ 오류 메시지 출력 (게임은 계속)
+│
+├─ history.json 없음 ────→ 빈 목록으로 시작
+└─ history.json 저장 실패 → 오류 메시지 출력 (게임은 계속)
+```
 
 ## `InputResult`: 특수 입력을 구분하는 열거형 
 ```python
