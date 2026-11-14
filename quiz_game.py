@@ -687,7 +687,41 @@ class QuizGame:
         self.save_data()
         print("\n 퀴즈가 추가되었습니다!")
 
+    def delete_quiz(self) -> None:
+        """
+        퀴즈를 삭제합니다.
+        """
+        if not self.quizzes:
+            print("\n 등록된 퀴즈가 없습니다.")
+            return
 
+        # 퀴즈 목록 출력
+        self.list_quizzes()
+        
+        index = self._get_int_input("삭제할 퀴즈의 번호를 입력하세요: ", 1, len(self.quizzes))
+        
+        # pop: 특정 위치의 항목을 꺼내면서 삭제하는 메서드
+        # 사용자는 1부터 시작하는 번호를 입력하므로 실제 리스트 인덱스(0부터 시작)로 변환해서 삭제한다.
+        self.quizzes.pop(index - 1)
+        self.save_data()
+        print("\n 퀴즈가 삭제되었습니다!")
+
+    def list_quizzes(self) -> None:
+        """
+        등록된 퀴즈 목록을 출력합니다.
+
+        문제 문장만 보여 주고 정답 번호는 출력하지 않습니다.
+        풀기 전에 목록을 확인해도 답이 바로 드러나지 않게 하기 위해서입니다.
+        """
+        if not self.quizzes:
+            print("\n 등록된 퀴즈가 없습니다.")
+            return
+
+        print(f"\n 등록된 퀴즈 목록 (총 {len(self.quizzes)}개)")
+        print("-" * 40)
+        for i, quiz in enumerate(self.quizzes, 1):
+            print(f"[{i}] {quiz.question}")
+        print("-" * 40)
 
     def run(self) -> None:
         """
@@ -714,8 +748,7 @@ class QuizGame:
                 elif choice == 2:
                     self.add_quiz()
                 elif choice == 3:
-                    # todo
-                    return
+                    self.delete_quiz()
                 elif choice == 4:
                     # todo
                     return
